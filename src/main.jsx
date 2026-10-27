@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowDown,
@@ -23,6 +23,8 @@ import whatsApp1 from '../WhatsApp Image 2026-10-26 at 10.27.24 PM.jpeg';
 import whatsApp2 from '../WhatsApp Image 2026-10-26 at 10.27.25 PM.jpeg';
 import dsc1400 from '../DSC_1400.JPG';
 import dsc2395 from '../DSC_2395.JPG';
+import surpriseVideo from '../surprise-video.mp4';
+import birthdayAudio from '../ReelAudio-24577.mp3';
 
 const birthdayConfig = {
   name: 'Your Sister',
@@ -103,15 +105,64 @@ function App() {
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizComplete, setQuizComplete] = useState(false);
   const [quizMessage, setQuizMessage] = useState('');
+  const [showSurpriseVideo, setShowSurpriseVideo] = useState(false);
+  const [videoPlaybackError, setVideoPlaybackError] = useState('');
   const [score, setScore] = useState(0);
   const [selectedMemory, setSelectedMemory] = useState(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [surprise, setSurprise] = useState(false);
+  const [hugSent, setHugSent] = useState(false);
+  const surpriseVideoRef = useRef(null);
+  const birthdayAudioRef = useRef(null);
+  const clickAudioContextRef = useRef(null);
   const [now, setNow] = useState(new Date());
+  const [audioPlaybackError, setAudioPlaybackError] = useState('');
+  const [musicPlaying, setMusicPlaying] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    function playButtonSound(event) {
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest('button, [role="button"]');
+      if (
+        !button ||
+        button.disabled ||
+        button.getAttribute('aria-disabled') === 'true' ||
+        button.hasAttribute('data-music-button')
+      ) return;
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      const audioContext = clickAudioContextRef.current || new AudioContextClass();
+      clickAudioContextRef.current = audioContext;
+      if (audioContext.state === 'suspended') audioContext.resume();
+
+      [880, 1174.66].forEach((frequency, index) => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        const start = audioContext.currentTime + index * 0.045;
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.035, start + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.17);
+      });
+    }
+
+    document.addEventListener('click', playButtonSound, true);
+    return () => {
+      document.removeEventListener('click', playButtonSound, true);
+      clickAudioContextRef.current?.close();
+    };
   }, []);
 
   const galleryItems = useMemo(() => {
@@ -196,27 +247,33 @@ function App() {
     setTimeout(() => setSurprise(false), 4200);
   }
 
-  function openIntro() {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (AudioContextClass) {
-      const audioContext = new AudioContextClass();
-      const notes = [392, 523.25, 659.25];
-      notes.forEach((frequency, index) => {
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = frequency;
-        gainNode.gain.value = 0.0001;
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        oscillator.start(audioContext.currentTime + index * 0.12);
-        gainNode.gain.exponentialRampToValueAtTime(0.06, audioContext.currentTime + index * 0.12 + 0.08);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + index * 0.12 + 0.45);
-        oscillator.stop(audioContext.currentTime + index * 0.12 + 0.5);
-      });
-    }
+  function playSurpriseVideo() {
+    setShowSurpriseVideo(true);
+    setVideoPlaybackError('');
+    const video = surpriseVideoRef.current;
+    if (showSurpriseVideo && video) video.currentTime = 0;
+    video?.play().catch(() => {
+      setVideoPlaybackError('Your surprise is ready. Tap play on the video to start it.');
+    });
+  }
 
-    setIntroOpen(false);
+  function sendHug() {
+    setShowLetter(false);
+    setHugSent(true);
+    setTimeout(() => setHugSent(false), 3600);
+  }
+
+  function openIntro() {
+    setAudioPlaybackError('');
+    const audio = birthdayAudioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    audio.play().then(() => {
+      setMusicPlaying(true);
+    }).catch(() => {
+      setMusicPlaying(false);
+      setAudioPlaybackError('The music could not start. Please tap the button to try again.');
+    });
   }
 
   function handleAnswer(option) {
@@ -247,21 +304,62 @@ function App() {
 
   return (
     <>
+      <audio
+        ref={birthdayAudioRef}
+        src={birthdayAudio}
+        preload="auto"
+        onEnded={() => {
+          setMusicPlaying(false);
+          setIntroOpen(false);
+        }}
+        onError={() => {
+          setMusicPlaying(false);
+          setAudioPlaybackError('The birthday music could not be loaded. Please try again later.');
+        }}
+      />
       {introOpen && (
         <div className="intro-screen">
           <div className="intro-orb orb-one" />
           <div className="intro-orb orb-two" />
-          <div className="intro-card">
-            <div className="gift-envelope">
-              <div className="envelope-flap" />
-              <div className="envelope-heart">♥</div>
+          {musicPlaying && (
+            <div className="music-celebration" aria-hidden="true">
+              <div className="music-notes">
+                {Array.from({ length: 18 }, (_, index) => (
+                  <span
+                    className="music-note"
+                    key={index}
+                    style={{
+                      left: `${(index * 47 + 9) % 100}%`,
+                      top: `${(index * 31 + 8) % 78}%`,
+                      animationDelay: `${(index % 7) * 0.35}s`
+                    }}
+                  >
+                    {['♪', '♫', '♬'][index % 3]}
+                  </span>
+                ))}
+              </div>
+              <div className="music-bunnies">
+                <span>🐰</span><span>🐇</span><span>🐰</span>
+              </div>
             </div>
-            <p className="eyebrow">A little surprise for you</p>
+          )}
+          <div className="intro-card">
+            {!musicPlaying && (
+              <div className="gift-envelope">
+                <div className="envelope-flap" />
+                <div className="envelope-heart">♥</div>
+              </div>
+            )}
+            <p className="eyebrow">{musicPlaying ? 'A birthday song just for you' : 'A little surprise for you'}</p>
             <h1>{birthdayConfig.introTitle}</h1>
-            <p className="intro-subtitle">{birthdayConfig.introSubtitle}</p>
-            <button className="primary-button" onClick={openIntro}>
-              Open Your Surprise <Heart size={17} fill="currentColor" />
+            <p className="intro-subtitle">
+              {musicPlaying ? 'Enjoy your birthday music... your surprise is opening soon 💗' : birthdayConfig.introSubtitle}
+            </p>
+            <button className="primary-button" data-music-button onClick={openIntro} disabled={musicPlaying}>
+              {musicPlaying ? 'Music is playing...' : audioPlaybackError ? 'Try the music again' : 'Open Your Surprise'}
+              <Heart size={17} fill="currentColor" />
             </button>
+            {audioPlaybackError && <p className="video-playback-error" role="status">{audioPlaybackError}</p>}
           </div>
         </div>
       )}
@@ -533,9 +631,22 @@ function App() {
                   <h3>Congratulations! You have officially unlocked your birthday surprise!</h3>
                   <p>You answered {score} out of {quizQuestions.length} correctly. You deserve all the love today.</p>
                 </div>
-                <button type="button" className="primary-button" onClick={() => document.getElementById('gift-box')?.scrollIntoView({ behavior: 'smooth' })}>
-                  Continue to the next surprise <Play size={16} />
+                <button type="button" className="primary-button" onClick={playSurpriseVideo}>
+                  {showSurpriseVideo ? 'Replay your surprise' : 'Play your surprise'} <Play size={16} />
                 </button>
+                <div className={`surprise-video-wrap ${showSurpriseVideo ? 'is-visible' : ''}`} aria-hidden={!showSurpriseVideo}>
+                  <video
+                    ref={surpriseVideoRef}
+                    controls
+                    playsInline
+                    preload="none"
+                    onPlay={() => setVideoPlaybackError('')}
+                  >
+                    <source src={surpriseVideo} type="video/mp4" />
+                    Your browser does not support video playback.
+                  </video>
+                  {videoPlaybackError && <p className="video-playback-error" role="status">{videoPlaybackError}</p>}
+                </div>
               </>
             )}
           </div>
@@ -584,13 +695,30 @@ function App() {
                   <p key={index}>{line || <span>&nbsp;</span>}</p>
                 ))}
               </div>
-              <button type="button" className="primary-button" onClick={() => setShowLetter(false)}>
+              <button type="button" className="primary-button" onClick={sendHug}>
                 Sending you a big hug <Heart size={16} fill="currentColor" />
               </button>
             </article>
           </div>
         )}
       </main>
+      {hugSent && (
+        <div className="hug-celebration" role="status" aria-label="A big hug with lots of love">
+          {Array.from({ length: 18 }, (_, index) => (
+            <span
+              className="hug-particle"
+              key={index}
+              style={{
+                left: `${(index * 47 + 11) % 100}%`,
+                animationDelay: `${(index % 6) * 0.12}s`
+              }}
+            >
+              {index % 4 === 0 ? '🤗' : '💗'}
+            </span>
+          ))}
+          <div className="hug-message">Big hug sent! 🤗</div>
+        </div>
+      )}
     </>
   );
 }
